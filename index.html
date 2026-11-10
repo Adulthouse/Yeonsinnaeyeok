@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>이게 무슨 짓이야</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 15px 10px 40px;
+  min-height: 100vh;
+  background: #222;
+  background-image: url("images.jpeg");
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  overflow-x: hidden;
+  font-family: Arial, sans-serif;
+}
+
+/* 게임 전체 영역 */
+#gameContainer {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+}
+
+/* 게임 화면 자동 크기 조절 */
+#gameCanvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 2;
+  border: 2px solid #333;
+  background-image: url("오로라.jpeg");
+  background-size: cover;
+  background-position: center;
+  touch-action: none;
+}
+
+/* 게임 오버 */
+#gameOverScreen {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-size: 26px;
+  z-index: 10;
+}
+
+#restartBtn {
+  margin-top: 20px;
+  padding: 12px 25px;
+  font-size: 18px;
+  background: #00aaff;
+  border: none;
+  border-radius: 10px;
+  color: white;
+  cursor: pointer;
+}
+
+/* 게임 멈춤 버튼 */
+#pauseBtn {
+  display: block;
+  width: 180px;
+  margin: 18px auto 35px;
+  padding: 13px;
+  font-size: 18px;
+  font-weight: bold;
+  background: crimson;
+  border: none;
+  border-radius: 12px;
+  color: white;
+  cursor: pointer;
+}
+
+/* 전역일 계산기 */
+#calculator {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 20px 15px;
+  text-align: center;
+  color: white;
+  background-color: green;
+  border-radius: 15px;
+}
+
+#calculator h1 {
+  color: yellow;
+  font-family: "Times New Roman", serif;
+  font-size: 30px;
+  margin-top: 5px;
+}
+
+#calculator label {
+  display: block;
+  margin-top: 18px;
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+#calculator input,
+#calculator select {
+  width: 100%;
+  max-width: 300px;
+  padding: 11px;
+  border-radius: 7px;
+  border: 1px solid #aaa;
+  font-size: 16px;
+}
+
+#calculator button {
+  margin-top: 22px;
+  padding: 12px 25px;
+  background: #008cff;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 17px;
+  cursor: pointer;
+}
+
+#result {
+  margin-top: 25px;
+  font-size: 32px;
+  font-weight: bold;
+  color: #00ff66;
+  min-height: 40px;
+}
+
+/* 작은 휴대폰 화면 */
+@media (max-width: 360px) {
+  body {
+    padding: 10px 5px 30px;
+  }
+
+  #calculator h1 {
+    font-size: 25px;
+  }
+
+  #result {
+    font-size: 27px;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<!-- 벽돌깨기 게임 -->
+<div id="gameContainer">
+
+  <canvas id="gameCanvas" width="480" height="320" style="background-image: url(오로라.jpeg);"></canvas>
+
+  <div id="gameOverScreen">
+    <div style="color:red;"><strong>GAME OVER</strong></div>
+    <button id="restartBtn">다시 시작</button>
+  </div>
+
+</div>
+
+<!-- 게임과 계산기 사이에 배치 -->
+<button id="pauseBtn">게임 멈춤</button>
+
+<!-- 전역일 계산기 -->
+<div id="calculator">
+
+  <h1>전역일 계산기</h1>
+
+  <label for="startDate">입대일 선택</label>
+  <input type="date" id="startDate">
+
+  <label for="branch">군 종류 선택</label>
+  <select id="branch">
+    <option value="army">육군</option>
+    <option value="navy">해군</option>
+    <option value="airForce">공군</option>
+  </select>
+
+  <label for="serviceDays">복무 기간 (일)</label>
+  <input type="number" id="serviceDays" value="547" readonly>
+
+  <button id="calculateBtn">전역일 계산</button>
+
+  <div id="result"></div>
+
+</div>
+
+<script>
+/* =========================
+   벽돌깨기 게임
+========================= */
+
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+const gameOverScreen = document.getElementById("gameOverScreen");
+const restartBtn = document.getElementById("restartBtn");
+const pauseBtn = document.getElementById("pauseBtn");
+
+const W = canvas.width;
+const H = canvas.height;
+
+let ballRadius = 10;
+
+let x = W / 2;
+let y = H - 30;
+
+let dx = 2;
+let dy = -2;
+
+const paddleHeight = 10;
+
+let paddleWidth = 75;
+let paddleX = (W - paddleWidth) / 2;
+
+let rightPressed = false;
+let leftPressed = false;
+
+let brickRowCount = 3;
+const brickColumnCount = 5;
+
+const brickWidth = 75;
+const brickHeight = 20;
+const brickPadding = 10;
+const brickOffsetTop = 30;
+const brickOffsetLeft = 30;
+
+let bricks = [];
+
+let score = 0;
+let stage = 1;
+
+let gameOver = false;
+let gamePaused = false;
+
+let animationId = null;
+
+
+/* 벽돌 생성 */
+
+function createBricks() {
+  bricks = [];
+
+  for (let c = 0; c < brickColumnCount; c++) {
+    bricks[c] = [];
+
+    for (let r = 0; r < brickRowCount; r++) {
+      bricks[c][r] = {
+        x: 0,
+        y: 0,
+        status: 1
+      };
+    }
+  }
+}
+
+
+/* 키보드 조작 */
+
+document.addEventListener("keydown", function(e) {
+  if (e.key === "ArrowRight" || e.key === "Right") {
+    rightPressed = true;
+    e.preventDefault();
+  }
+
+  if (e.key === "ArrowLeft" || e.key === "Left") {
+    leftPressed = true;
+    e.preventDefault();
+  }
+});
+
+document.addEventListener("keyup", function(e) {
+  if (e.key === "ArrowRight" || e.key === "Right") {
+    rightPressed = false;
+  }
+
+  if (e.key === "ArrowLeft" || e.key === "Left") {
+    leftPressed = false;
+  }
+});
+
+
+/* 터치 조작 - 화면 크기에 맞춰 좌표 계산 */
+
+canvas.addEventListener("pointermove", function(e) {
+
+  if (e.pointerType === "mouse" && e.buttons === 0) return;
+
+  e.preventDefault();
+
+  const rect = canvas.getBoundingClientRect();
+
+  const scaleX = W / rect.width;
+
+  const touchX = (e.clientX - rect.left) * scaleX;
+
+  paddleX = touchX - paddleWidth / 2;
+
+  if (paddleX < 0) {
+    paddleX = 0;
+  }
+
+  if (paddleX > W - paddleWidth) {
+    paddleX = W - paddleWidth;
+  }
+
+}, { passive: false });
+
+
+/* 벽돌 충돌 */
+
+function collisionDetection() {
+
+  for (let c = 0; c < brickColumnCount; c++) {
+
+    for (let r = 0; r < brickRowCount; r++) {
+
+      let b = bricks[c][r];
+
+      if (b.status === 1) {
+
+        if (
+          x + ballRadius > b.x &&
+          x - ballRadius < b.x + brickWidth &&
+          y + ballRadius > b.y &&
+          y - ballRadius < b.y + brickHeight
+        ) {
+
+          dy = -dy;
+
+          b.status = 0;
+
+          score++;
+
+          dx *= 1.02;
+          dy *= 1.02;
+
+          if (score === brickRowCount * brickColumnCount) {
+            nextStage();
+            return;
+          }
+        }
+      }
+    }
+  }
+}
+
+
+/* 다음 스테이지 */
+
+function nextStage() {
+
+  stage++;
+
+  score = 0;
+
+  brickRowCount++;
+
+  paddleWidth *= 0.9;
+
+  if (paddleWidth < 40) {
+    paddleWidth = 40;
+  }
+
+  x = W / 2;
+  y = H - 30;
+
+  dx = 2 * (Math.random() > 0.5 ? 1 : -1);
+  dy = -2;
+
+  paddleX = (W - paddleWidth) / 2;
+
+  createBricks();
+}
+
+
+/* 공 그리기 */
+
+function drawBall() {
+
+  ctx.beginPath();
+
+  ctx.arc(x, y, ballRadius, 0, Math.PI * 2);
+
+  ctx.fillStyle = "#0095DD";
+
+  ctx.fill();
+
+  ctx.closePath();
+}
+
+
+/* 패들 그리기 */
+
+function drawPaddle() {
+
+  ctx.beginPath();
+
+  ctx.rect(
+    paddleX,
+    H - paddleHeight,
+    paddleWidth,
+    paddleHeight
+  );
+
+  ctx.fillStyle = "#0095DD";
+
+  ctx.fill();
+
+  ctx.closePath();
+}
+
+
+/* 벽돌 그리기 */
+
+function drawBricks() {
+
+  for (let c = 0; c < brickColumnCount; c++) {
+
+    for (let r = 0; r < brickRowCount; r++) {
+
+      if (bricks[c][r].status === 1) {
+
+        let brickX = c * (brickWidth + brickPadding) + brickOffsetLeft;
+
+        let brickY = r * (brickHeight + brickPadding) + brickOffsetTop;
+
+        bricks[c][r].x = brickX;
+        bricks[c][r].y = brickY;
+
+        ctx.beginPath();
+
+        ctx.rect(brickX, brickY, brickWidth, brickHeight);
+
+        ctx.fillStyle = "#0095DD";
+
+        ctx.fill();
+
+        ctx.closePath();
+      }
+    }
+  }
+}
+
+
+/* 스테이지 표시 */
+
+function drawScore() {
+
+  ctx.font = "16px Arial";
+
+  ctx.fillStyle = "#00ff00";
+
+  ctx.fillText(`스테이지: ${stage}`, 8, 20);
+
+}
+
+
+/* 게임 실행 */
+
+function draw() {
+
+  if (gameOver || gamePaused) {
+    animationId = null;
+    return;
+  }
+
+  ctx.clearRect(0, 0, W, H);
+
+  drawBricks();
+
+  drawBall();
+
+  drawPaddle();
+
+  drawScore();
+
+  collisionDetection();
+
+  if (gameOver || gamePaused) return;
+
+  // 좌우 벽 충돌
+  if (
+    x + dx > W - ballRadius ||
+    x + dx < ballRadius
+  ) {
+    dx = -dx;
+  }
+
+  // 천장 충돌
+  if (y + dy < ballRadius) {
+
+    dy = -dy;
+
+  }
+
+  // 패들 충돌 및 게임 오버
+  else if (y + dy > H - ballRadius) {
+
+    if (
+      x > paddleX &&
+      x < paddleX + paddleWidth
+    ) {
+
+      dy = -dy;
+
+    } else {
+
+      endGame();
+
+      return;
+    }
+  }
+
+  // 패들 이동
+  if (rightPressed && paddleX < W - paddleWidth) {
+    paddleX += 5;
+  }
+
+  else if (leftPressed && paddleX > 0) {
+    paddleX -= 5;
+  }
+
+  x += dx;
+  y += dy;
+
+  animationId = requestAnimationFrame(draw);
+}
+
+
+/* 게임 오버 */
+
+function endGame() {
+
+  gameOver = true;
+
+  cancelAnimationFrame(animationId);
+
+  animationId = null;
+
+  gameOverScreen.style.display = "flex";
+}
+
+
+/* 게임 재시작 */
+
+function restartGame() {
+
+  cancelAnimationFrame(animationId);
+
+  gameOver = false;
+  gamePaused = false;
+
+  stage = 1;
+  score = 0;
+
+  brickRowCount = 3;
+
+  paddleWidth = 75;
+
+  paddleX = (W - paddleWidth) / 2;
+
+  x = W / 2;
+  y = H - 30;
+
+  dx = 2;
+  dy = -2;
+
+  rightPressed = false;
+  leftPressed = false;
+
+  createBricks();
+
+  gameOverScreen.style.display = "none";
+
+  pauseBtn.textContent = "게임 멈춤";
+
+  draw();
+}
+
+
+/* 일시정지 및 재개 */
+
+function togglePause() {
+
+  if (gameOver) return;
+
+  gamePaused = !gamePaused;
+
+  if (gamePaused) {
+
+    cancelAnimationFrame(animationId);
+
+    animationId = null;
+
+    pauseBtn.textContent = "게임 재개";
+
+  } else {
+
+    pauseBtn.textContent = "게임 멈춤";
+
+    if (animationId === null) {
+      draw();
+    }
+  }
+}
+
+
+restartBtn.addEventListener("click", restartGame);
+
+pauseBtn.addEventListener("click", togglePause);
+
+createBricks();
+
+draw();
+
+
+/* =========================
+   전역일 계산기
+========================= */
+
+const servicePeriods = {
+  army: 547,
+  navy: 579,
+  airForce: 639
+};
+
+const branch = document.getElementById("branch");
+const serviceDays = document.getElementById("serviceDays");
+
+const startDate = document.getElementById("startDate");
+const resultDiv = document.getElementById("result");
+
+let dateTimer = null;
+
+
+/* 군 종류 변경 */
+
+branch.addEventListener("change", function() {
+
+  serviceDays.value = servicePeriods[this.value];
+
+});
+
+
+/* 전역일 계산 */
+
+function calculateDischargeDate() {
+
+  const dateValue = startDate.value;
+
+  const days = parseInt(serviceDays.value, 10);
+
+  if (!dateValue || isNaN(days)) {
+
+    resultDiv.textContent = "입대일과 군 종류를 선택하세요.";
+
+    return;
+  }
+
+  const [year, month, day] = dateValue.split("-").map(Number);
+
+  const dischargeDate = new Date(year, month - 1, day);
+
+  dischargeDate.setDate(dischargeDate.getDate() + days);
+
+  // 기존 타이머 제거
+  if (dateTimer !== null) {
+    clearInterval(dateTimer);
+  }
+
+  function updateRemainingDays() {
+
+    const today = new Date();
+
+    today.setHours(0, 0, 0, 0);
+
+    const remainingDays = Math.ceil(
+      (dischargeDate - today) / (1000 * 60 * 60 * 24)
+    );
+
+    if (remainingDays <= 0) {
+
+      resultDiv.textContent = "전역일입니다!";
+
+    } else {
+
+      resultDiv.textContent = `D-${remainingDays}`;
+
+    }
+  }
+
+  updateRemainingDays();
+
+  dateTimer = setInterval(updateRemainingDays, 1000);
+
+}
+
+
+document.getElementById("calculateBtn")
+  .addEventListener("click", calculateDischargeDate);
+
+</script>
+
+</body>
+</html>
